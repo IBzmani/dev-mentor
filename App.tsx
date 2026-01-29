@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { INITIAL_FILES, LOGO_SVG } from './constants';
 import { FileItem, TerminalLine } from './types';
 import Editor from './components/Editor';
@@ -28,6 +28,22 @@ const App: React.FC = () => {
     ]);
   };
 
+  const handleRunTests = useCallback(async () => {
+    setTerminalLines(prev => [...prev, { text: '$ npm test', type: 'command' }]);
+    
+    // Simulate test execution
+    await new Promise(r => setTimeout(r, 1500));
+    
+    const output = "PASS tests/main.test.py\n✓ calculate_average_load correctly averages simple lists (45ms)\n✓ calculate_average_load handles empty input (12ms)\n\nTest Suites: 1 passed, 1 total\nTests: 2 passed, 2 total\nSnapshots: 0 total\nTime: 1.84s";
+    
+    setTerminalLines(prev => [
+      ...prev, 
+      { text: output, type: 'output' }
+    ]);
+    
+    return output;
+  }, []);
+
   return (
     <div className="flex flex-col h-screen bg-background-dark text-white overflow-hidden">
       {/* Top Header */}
@@ -47,7 +63,7 @@ const App: React.FC = () => {
         <div className="flex items-center gap-3">
           <button 
             onClick={handleRun}
-            className="flex items-center justify-center gap-2 rounded-lg h-9 px-4 bg-primary text-white text-sm font-bold transition-all hover:bg-primary/80">
+            className="flex items-center justify-center gap-2 rounded-lg h-9 px-4 bg-primary text-white text-sm font-bold transition-all hover:bg-primary/80 shadow-lg shadow-primary/20">
             <span className="material-symbols-outlined text-sm">play_arrow</span>
             <span>Run</span>
           </button>
@@ -59,7 +75,7 @@ const App: React.FC = () => {
             <span className="material-symbols-outlined">settings</span>
           </button>
           <div 
-            className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-8 ml-2 border border-[#3b4354]" 
+            className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-8 ml-2 border-2 border-primary/50" 
             style={{ backgroundImage: 'url("https://picsum.photos/id/64/100/100")' }}>
           </div>
         </div>
@@ -103,9 +119,12 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="mt-auto p-4 border-t border-border-gray">
-            <div className="flex items-center gap-3 text-[#9da6b9]">
-              <div className="size-2 rounded-full bg-green-500"></div>
-              <span className="text-xs">Python 3.10 Environment</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 text-[#9da6b9]">
+                <div className="size-2 rounded-full bg-green-500 animate-pulse"></div>
+                <span className="text-xs">Python 3.10 Env</span>
+              </div>
+              <span className="material-symbols-outlined text-sm text-[#3b4354]">refresh</span>
             </div>
           </div>
         </aside>
@@ -121,17 +140,8 @@ const App: React.FC = () => {
                 className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-all ${activeFileName === file.name ? 'border-primary bg-editor-bg' : 'border-transparent hover:bg-[#282e39]'}`}>
                 <span className={`material-symbols-outlined text-[16px] ${activeFileName === file.name ? 'text-primary' : 'text-[#9da6b9]'}`}>description</span>
                 <span className={`text-sm font-medium ${activeFileName === file.name ? 'text-white' : 'text-[#9da6b9]'}`}>{file.name}</span>
-                {activeFileName !== file.name && (
-                   <span className="material-symbols-outlined text-[14px] text-[#9da6b9] ml-2">close</span>
-                )}
               </button>
             ))}
-          </div>
-          {/* Breadcrumbs */}
-          <div className="flex items-center gap-2 px-4 py-2 bg-[#161a23] text-[#9da6b9] text-xs">
-            <span>src</span>
-            <span className="material-symbols-outlined text-[12px]">chevron_right</span>
-            <span className="text-white">{activeFileName}</span>
           </div>
 
           <Editor 
@@ -141,45 +151,40 @@ const App: React.FC = () => {
           />
 
           {/* Terminal */}
-          <div className="h-48 border-t border-border-gray bg-background-dark/80 flex flex-col">
-            <div className="flex gap-4 border-b border-border-gray px-4 py-2 text-[#9da6b9] text-xs">
-              <span className="text-white font-bold border-b border-white pb-2 -mb-2">Terminal</span>
-              <span className="cursor-pointer hover:text-white">Debug Console</span>
-              <span className="cursor-pointer hover:text-white">Output</span>
+          <div className="h-48 border-t border-border-gray bg-background-dark flex flex-col">
+            <div className="flex gap-4 border-b border-border-gray px-4 py-2 text-[#9da6b9] text-[10px] uppercase font-bold tracking-widest">
+              <span className="text-white border-b border-white pb-2 -mb-2">Output & Tests</span>
+              <span className="cursor-pointer hover:text-white transition-colors">Debug Console</span>
             </div>
-            <div className="flex-1 p-4 font-mono text-xs overflow-auto">
+            <div className="flex-1 p-4 font-mono text-[11px] overflow-auto scrollbar-hide bg-black/20">
               {terminalLines.map((line, i) => (
-                <div key={i} className={line.type === 'command' ? 'text-green-500' : 'text-[#d1d5db]'}>
+                <div key={i} className={`mb-1 ${line.type === 'command' ? 'text-primary font-bold' : line.type === 'error' ? 'text-red-400' : 'text-[#d1d5db]'}`}>
+                  {line.type === 'command' && <span className="mr-2 opacity-50">❯</span>}
                   {line.text}
                 </div>
               ))}
-              <div className="text-[#9da6b9] animate-pulse">_</div>
+              <div className="text-primary animate-pulse inline-block h-3 w-1.5 align-middle ml-1 bg-primary"></div>
             </div>
           </div>
         </section>
 
         {/* Right AI Sidebar */}
-        <MentorPanel codeContent={activeFile.content} />
+        <MentorPanel codeContent={activeFile.content} onRunTests={handleRunTests} />
       </main>
 
       {/* Footer Status Bar */}
-      <footer className="h-6 bg-primary flex items-center justify-between px-4 text-[10px] font-medium shrink-0 text-white">
+      <footer className="h-6 bg-primary flex items-center justify-between px-4 text-[10px] font-medium shrink-0 text-white uppercase tracking-tighter">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1">
             <span className="material-symbols-outlined text-[12px]">sync</span>
             <span>Cloud Connected</span>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="material-symbols-outlined text-[12px]">account_circle</span>
-            <span>User: student_01</span>
-          </div>
+          <span>UTF-8</span>
         </div>
         <div className="flex items-center gap-4">
-          <span>Spaces: 4</span>
-          <span>UTF-8</span>
           <div className="flex items-center gap-1 bg-white/20 px-2 h-full">
-            <span className="material-symbols-outlined text-[12px]">bolt</span>
-            <span>AI Guidance Active</span>
+            <span className="material-symbols-outlined text-[12px]">psychology</span>
+            <span>Senior Socratic Guidance: Online</span>
           </div>
           <span>Python 3.10.12</span>
         </div>

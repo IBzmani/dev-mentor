@@ -2,6 +2,7 @@
   "name": "Dev-Mentor IDE",
   "description": "A high-end code editor with a built-in real-time AI mentor using Gemini Live API for voice-guided pair programming.",
   "requestFramePermissions": [
-    "microphone"
+    "microphone",
+    "camera"
   ]
 }
