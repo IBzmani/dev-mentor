@@ -34,15 +34,43 @@ const App: React.FC = () => {
     // Simulate test execution
     await new Promise(r => setTimeout(r, 1500));
 
-    const output = "PASS tests/main.test.py\n✓ calculate_average_load correctly averages simple lists (45ms)\n✓ calculate_average_load handles empty input (12ms)\n\nTest Suites: 1 passed, 1 total\nTests: 2 passed, 2 total\nSnapshots: 0 total\nTime: 1.84s";
+    // Simple check to mimic pass/fail - obviously a real runner would be better
+    // This is just a proxy for the demo
+    const currentCode = files.find(f => f.name === 'two_sum.py')?.content || '';
+    const hasImplementation = currentCode.includes('return') && !currentCode.includes('pass');
+
+    let output;
+    let type: 'output' | 'error' = 'output';
+
+    if (hasImplementation) {
+      output = `PASS tests/two_sum.test.py
+✓ two_sum returns correct indices for example case (4ms)
+✓ two_sum handles multiple solutions correctly (2ms)
+✓ two_sum handles negative numbers (1ms)
+
+Test Suites: 1 passed, 1 total
+Tests: 3 passed, 3 total
+Snapshots: 0 total
+Time: 0.45s`;
+    } else {
+      type = 'error';
+      output = `FAIL tests/two_sum.test.py
+✕ two_sum returns correct indices for example case (4ms)
+  Expected: [0, 1]
+  Received: None
+
+Test Suites: 1 failed, 1 total
+Tests: 0 passed, 3 failed
+Time: 0.45s`;
+    }
 
     setTerminalLines(prev => [
       ...prev,
-      { text: output, type: 'output' }
+      { text: output, type }
     ]);
 
     return output;
-  }, []);
+  }, [files]);
 
   return (
     <div className="flex flex-col h-screen bg-background-dark text-white overflow-hidden">
@@ -66,6 +94,12 @@ const App: React.FC = () => {
             className="flex items-center justify-center gap-2 rounded-lg h-9 px-4 bg-primary text-white text-sm font-bold transition-all hover:bg-primary/80 shadow-lg shadow-primary/20">
             <span className="material-symbols-outlined text-sm">play_arrow</span>
             <span>Run</span>
+          </button>
+          <button
+            onClick={handleRunTests}
+            className="flex items-center justify-center gap-2 rounded-lg h-9 px-4 bg-[#e5c07b] text-black text-sm font-bold transition-all hover:bg-[#d1b06f] shadow-lg shadow-[#e5c07b]/20">
+            <span className="material-symbols-outlined text-sm">science</span>
+            <span>Test</span>
           </button>
           <button className="flex items-center justify-center gap-2 rounded-lg h-9 px-4 bg-[#282e39] text-white text-sm font-bold hover:bg-[#3b4354]">
             <span className="material-symbols-outlined text-sm">settings_voice</span>
