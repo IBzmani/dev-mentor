@@ -1,5 +1,5 @@
-
 import React from 'react';
+import MonacoEditor, { OnMount } from '@monaco-editor/react';
 
 interface EditorProps {
   content: string;
@@ -8,44 +8,49 @@ interface EditorProps {
 }
 
 const Editor: React.FC<EditorProps> = ({ content, onChange, fileName }) => {
-  // Simple syntax highlighting simulator for Python
-  const renderHighlightedCode = (text: string) => {
-    return text.split('\n').map((line, idx) => {
-      const parts = line.split(/(\s+|#.*|['"].*?['"]|[().,:[\]])/);
-      return (
-        <div key={idx} className="flex min-h-[24px]">
-          <div className="w-12 text-[#3b4354] text-right select-none shrink-0 pr-4 border-r border-border-gray mr-4">
-            {idx + 1}
-          </div>
-          <div className="whitespace-pre">
-            {parts.map((part, pIdx) => {
-              if (part.startsWith('#')) return <span key={pIdx} className="text-[#5c6370] italic">{part}</span>;
-              if (part.startsWith("'") || part.startsWith('"')) return <span key={pIdx} className="text-[#98c379]">{part}</span>;
-              if (['def', 'import', 'from', 'return', 'for', 'in', 'if', 'else', 'elif', 'while', 'as', 'try', 'except'].includes(part)) {
-                return <span key={pIdx} className="text-[#c678dd]">{part}</span>;
-              }
-              if (['math', 'len', 'print', 'range', 'list', 'dict', 'set', 'int', 'float', 'str', 'sum', 'min', 'max'].includes(part)) {
-                return <span key={pIdx} className="text-[#61afef]">{part}</span>;
-              }
-              if (/^\d+$/.test(part)) return <span key={pIdx} className="text-[#d19a66]">{part}</span>;
-              return <span key={pIdx} className="text-[#d1d5db]">{part}</span>;
-            })}
-          </div>
-        </div>
-      );
-    });
+  const handleEditorChange = (value: string | undefined) => {
+    onChange(value || '');
+  };
+
+  const handleEditorDidMount: OnMount = (editor, monaco) => {
+    // You can configure the editor here after it mounts
+    editor.focus();
+  };
+
+  // Determine language based on file extension
+  const getLanguage = (fileName: string) => {
+    if (fileName.endsWith('.py')) return 'python';
+    if (fileName.endsWith('.js') || fileName.endsWith('.jsx')) return 'javascript';
+    if (fileName.endsWith('.ts') || fileName.endsWith('.tsx')) return 'typescript';
+    if (fileName.endsWith('.html')) return 'html';
+    if (fileName.endsWith('.css')) return 'css';
+    if (fileName.endsWith('.json')) return 'json';
+    return 'plaintext';
   };
 
   return (
-    <div className="flex-1 overflow-auto bg-editor-bg p-0 font-mono text-sm leading-6 relative group">
-      <div className="p-4">
-        {renderHighlightedCode(content)}
-      </div>
-      <textarea
-        className="absolute inset-0 opacity-0 cursor-text resize-none p-4 pl-20"
+    <div className="flex-1 overflow-hidden bg-[#1e1e1e]">
+      <MonacoEditor
+        height="100%"
+        width="100%"
+        language={getLanguage(fileName)}
         value={content}
-        onChange={(e) => onChange(e.target.value)}
-        spellCheck={false}
+        theme="vs-dark"
+        onChange={handleEditorChange}
+        onMount={handleEditorDidMount}
+        options={{
+          minimap: { enabled: true },
+          fontSize: 14,
+          lineNumbers: 'on',
+          roundedSelection: false,
+          scrollBeyondLastLine: false,
+          readOnly: false,
+          automaticLayout: true,
+          fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace",
+          cursorBlinking: 'smooth',
+          cursorSmoothCaretAnimation: 'on',
+          padding: { top: 16 }
+        }}
       />
     </div>
   );

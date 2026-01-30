@@ -7,7 +7,7 @@ import MentorPanel from './components/MentorPanel';
 
 const App: React.FC = () => {
   const [files, setFiles] = useState<FileItem[]>(INITIAL_FILES);
-  const [activeFileName, setActiveFileName] = useState<string>('main.py');
+  const [activeFileName, setActiveFileName] = useState<string>('two_sum.py');
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([
     { text: '$ python main.py', type: 'command' },
     { text: 'Processing load: 25', type: 'output' }
@@ -30,17 +30,17 @@ const App: React.FC = () => {
 
   const handleRunTests = useCallback(async () => {
     setTerminalLines(prev => [...prev, { text: '$ npm test', type: 'command' }]);
-    
+
     // Simulate test execution
     await new Promise(r => setTimeout(r, 1500));
-    
+
     const output = "PASS tests/main.test.py\n✓ calculate_average_load correctly averages simple lists (45ms)\n✓ calculate_average_load handles empty input (12ms)\n\nTest Suites: 1 passed, 1 total\nTests: 2 passed, 2 total\nSnapshots: 0 total\nTime: 1.84s";
-    
+
     setTerminalLines(prev => [
-      ...prev, 
+      ...prev,
       { text: output, type: 'output' }
     ]);
-    
+
     return output;
   }, []);
 
@@ -61,7 +61,7 @@ const App: React.FC = () => {
           </nav>
         </div>
         <div className="flex items-center gap-3">
-          <button 
+          <button
             onClick={handleRun}
             className="flex items-center justify-center gap-2 rounded-lg h-9 px-4 bg-primary text-white text-sm font-bold transition-all hover:bg-primary/80 shadow-lg shadow-primary/20">
             <span className="material-symbols-outlined text-sm">play_arrow</span>
@@ -74,8 +74,8 @@ const App: React.FC = () => {
           <button className="flex items-center justify-center rounded-lg h-9 w-9 bg-[#282e39] text-white hover:bg-[#3b4354]">
             <span className="material-symbols-outlined">settings</span>
           </button>
-          <div 
-            className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-8 ml-2 border-2 border-primary/50" 
+          <div
+            className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-8 ml-2 border-2 border-primary/50"
             style={{ backgroundImage: 'url("https://picsum.photos/id/64/100/100")' }}>
           </div>
         </div>
@@ -90,7 +90,7 @@ const App: React.FC = () => {
               <h3 className="text-[#9da6b9] text-[10px] font-bold uppercase tracking-wider mb-4">Project Explorer</h3>
               <div className="flex flex-col gap-1">
                 {files.map(file => (
-                  <button 
+                  <button
                     key={file.name}
                     onClick={() => setActiveFileName(file.name)}
                     className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${activeFileName === file.name ? 'bg-primary/20 border border-primary/30' : 'hover:bg-[#282e39] border border-transparent'}`}>
@@ -134,7 +134,7 @@ const App: React.FC = () => {
           {/* Editor Tabs */}
           <div className="flex border-b border-border-gray bg-background-dark/50">
             {files.map(file => (
-              <button 
+              <button
                 key={file.name}
                 onClick={() => setActiveFileName(file.name)}
                 className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-all ${activeFileName === file.name ? 'border-primary bg-editor-bg' : 'border-transparent hover:bg-[#282e39]'}`}>
@@ -144,10 +144,10 @@ const App: React.FC = () => {
             ))}
           </div>
 
-          <Editor 
-            content={activeFile.content} 
-            onChange={handleFileChange} 
-            fileName={activeFile.name} 
+          <Editor
+            content={activeFile.content}
+            onChange={handleFileChange}
+            fileName={activeFile.name}
           />
 
           {/* Terminal */}
