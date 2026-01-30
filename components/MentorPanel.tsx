@@ -28,7 +28,7 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
   const [transcriptions, setTranscriptions] = useState<TranscriptionItem[]>([]);
   const [isListening, setIsListening] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  
+
   const audioCtxRef = useRef<AudioContext | null>(null);
   const outputAudioCtxRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef(0);
@@ -44,11 +44,17 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
 
   const addTranscription = useCallback((text: string, isAi: boolean) => {
     setTranscriptions(prev => {
-      const nextList = [
+      const last = prev[prev.length - 1];
+      if (last && last.isAi === isAi) {
+        return [
+          ...prev.slice(0, -1),
+          { ...last, text: last.text + text }
+        ];
+      }
+      return [
         ...prev,
         { id: Math.random().toString(36).substr(2, 9), text, isAi, timestamp: new Date() }
       ];
-      return nextList.slice(-20);
     });
   }, []);
 
@@ -79,7 +85,7 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
 
   const stopSession = useCallback(() => {
     if (sessionRef.current) {
-      try { sessionRef.current.close(); } catch (e) {}
+      try { sessionRef.current.close(); } catch (e) { }
       sessionRef.current = null;
     }
     if (scriptProcessorRef.current) {
@@ -107,30 +113,26 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
 
   const startSession = async () => {
     setErrorMessage(null);
-    
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
       setErrorMessage("Screen sharing is not supported in this browser.");
       return;
     }
 
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      setErrorMessage("API Key is required.");
+      return;
+    }
+
+
     try {
-      const aistudio = (window as any).aistudio;
-      if (aistudio) {
-        const hasKey = await aistudio.hasSelectedApiKey();
-        if (!hasKey) await aistudio.openSelectKey();
-      }
-
-      if (!process.env.API_KEY) {
-        setErrorMessage("API Key is required.");
-        return;
-      }
-
       const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       let screenStream: MediaStream;
       try {
-        screenStream = await navigator.mediaDevices.getDisplayMedia({ 
-          video: { displaySurface: 'monitor', frameRate: { max: 10 } },
-          audio: false 
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { displaySurface: 'monitor', frameRate: { max: 5 } },
+          audio: false
         });
       } catch (err) {
         micStream.getTracks().forEach(t => t.stop());
@@ -143,7 +145,7 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
       setIsListening(true);
       setStatus(MentorStatus.LISTENING);
 
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey });
 
       if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       if (!outputAudioCtxRef.current) outputAudioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -157,6 +159,7 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
 
       if (videoRef.current) {
         videoRef.current.srcObject = screenStream;
+        await videoRef.current.play().catch(console.error);
       }
 
       const sessionPromise = ai.live.connect({
@@ -179,7 +182,7 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
             frameIntervalRef.current = window.setInterval(() => {
               if (captureCanvasRef.current && videoRef.current && videoRef.current.readyState >= 2) {
                 const ctx = captureCanvasRef.current.getContext('2d');
-                if (ctx) {
+                if (ctx && videoRef.current.videoWidth > 0 && videoRef.current.videoHeight > 0) {
                   const scale = 0.5;
                   const w = videoRef.current.videoWidth * scale;
                   const h = videoRef.current.videoHeight * scale;
@@ -192,7 +195,7 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
                   });
                 }
               }
-            }, 1500);
+            }, 1000);
           },
           onmessage: async (message: LiveServerMessage) => {
             const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
@@ -231,7 +234,7 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
             }
 
             if (message.serverContent?.interrupted) {
-              sourcesRef.current.forEach(s => { try { s.stop(); } catch (e) {} });
+              sourcesRef.current.forEach(s => { try { s.stop(); } catch (e) { } });
               sourcesRef.current.clear();
               nextStartTimeRef.current = 0;
             }
@@ -245,11 +248,19 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
         },
         config: {
           responseModalities: [Modality.AUDIO],
-          systemInstruction: `You are a world-class senior developer and Socratic Mentor. 
-          You have access to a live stream of the user's screen in the background. 
-          Ask probing questions to guide the user without giving direct solutions.
-          Reference their code and terminal output visually.
-          Keep your responses concise and naturally conversational.`,
+          systemInstruction: `You are 'Dev-Mentor,' a senior full-stack engineer and Socratic teacher. Your goal is to guide junior developers (interns) through coding tasks using real-time multimodal input.
+
+Core Directives:
+
+Never Give the Answer: If you see a bug or a missing feature, do not provide the code block. Instead, ask a question that leads the user to notice it (e.g., 'I see you're using a map function here; what happens if the array is empty?').
+
+Visual Grounding: Use the video feed to reference specific lines or UI elements. Say 'I see you're looking at the useEffect on line 45' rather than 'Look at the effect.'
+
+The 'Verification' Loop: When the user makes a change, suggest they run the local test suite. Use function calling to trigger npm test.
+
+Multimodal Awareness: Respond to the user's voice tone. If they sound frustrated, simplify your questions and offer encouragement.
+
+Chain of Thought: Always use your 'Thinking' space to plan your Socratic path before speaking.`,
           tools: [{ functionDeclarations: [runTestsFunctionDeclaration] }],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } } },
           inputAudioTranscription: {},
@@ -292,7 +303,7 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
               <p className="text-[#9da6b9] text-xs font-medium">{getStatusText()}</p>
             </div>
           </div>
-          <button 
+          <button
             onClick={toggleListening}
             className={`size-8 rounded-lg flex items-center justify-center text-white transition-all shadow-xl ${isListening ? 'bg-primary shadow-[0_0_15px_rgba(17,82,212,0.4)]' : 'bg-[#282e39] hover:bg-[#3b4354]'}`}>
             <span className="material-symbols-outlined text-[20px]">{isListening ? 'mic' : 'mic_off'}</span>
@@ -310,10 +321,10 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
         <div className="bg-[#161a23] rounded-xl p-6 mb-8 flex flex-col items-center justify-center gap-4 border border-[#282e39]">
           <div className="flex items-end gap-1 h-12">
             {[...Array(9)].map((_, i) => (
-              <div 
-                key={i} 
+              <div
+                key={i}
                 ref={el => barRefs.current[i] = el}
-                className="w-1 bg-primary rounded-full transition-[height] duration-200" 
+                className="w-1 bg-primary rounded-full transition-[height] duration-200"
                 style={{ height: '4px' }}
               />
             ))}
