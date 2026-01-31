@@ -4,6 +4,7 @@ import { INITIAL_FILES, LOGO_SVG } from './constants';
 import { FileItem, TerminalLine } from './types';
 import Editor from './components/Editor';
 import MentorPanel from './components/MentorPanel';
+import { loadPyodide } from './utils/pyodide';
 
 const App: React.FC = () => {
   const [files, setFiles] = useState<FileItem[]>(INITIAL_FILES);
@@ -19,57 +20,66 @@ const App: React.FC = () => {
     setFiles(prev => prev.map(f => f.name === activeFileName ? { ...f, content: newContent } : f));
   };
 
-  const handleRun = () => {
+  const [isPyodideLoading, setIsPyodideLoading] = useState(false);
+
+  const handleRun = async () => {
     setTerminalLines(prev => [
       ...prev,
       { text: `$ python ${activeFileName}`, type: 'command' },
-      { text: `Executing ${activeFileName}...`, type: 'output' },
-      { text: `Processing load: 25`, type: 'output' }
+      { text: `Executing ${activeFileName}...`, type: 'output' }
     ]);
+
+    setIsPyodideLoading(true);
+    try {
+      // Lazy load pyodide on first run
+      const { runPythonArgs } = await import('./utils/pyodide');
+
+      const { output, error } = await runPythonArgs(activeFile.content);
+
+      setTerminalLines(prev => {
+        const lines = [...prev];
+        if (output) lines.push({ text: output, type: 'output' });
+        if (error) lines.push({ text: error, type: 'error' });
+        return lines;
+      });
+    } catch (e: any) {
+      setTerminalLines(prev => [...prev, { text: `System Error: ${e.message}`, type: 'error' }]);
+    }
+    setIsPyodideLoading(false);
   };
 
   const handleRunTests = useCallback(async () => {
-    setTerminalLines(prev => [...prev, { text: '$ npm test', type: 'command' }]);
+    setTerminalLines(prev => [...prev, { text: '$ python tests.py', type: 'command' }]);
+    setIsPyodideLoading(true);
 
-    // Simulate test execution
-    await new Promise(r => setTimeout(r, 1500));
+    try {
+      const { runPythonArgs } = await import('./utils/pyodide');
 
-    // Simple check to mimic pass/fail - obviously a real runner would be better
-    // This is just a proxy for the demo
-    const currentCode = files.find(f => f.name === 'two_sum.py')?.content || '';
-    const hasImplementation = currentCode.includes('return') && !currentCode.includes('pass');
+      // Combine user code and test code
+      const userCode = files.find(f => f.name === 'two_sum.py')?.content || '';
+      const testCode = files.find(f => f.name === 'tests.py')?.content || '';
 
-    let output;
-    let type: 'output' | 'error' = 'output';
+      // We need to write the user code to a virtual file so the test can import it
+      const pyodide = await loadPyodide();
+      pyodide.FS.writeFile('two_sum.py', userCode);
 
-    if (hasImplementation) {
-      output = `PASS tests/two_sum.test.py
-✓ two_sum returns correct indices for example case (4ms)
-✓ two_sum handles multiple solutions correctly (2ms)
-✓ two_sum handles negative numbers (1ms)
+      const { output, error } = await runPythonArgs(testCode);
 
-Test Suites: 1 passed, 1 total
-Tests: 3 passed, 3 total
-Snapshots: 0 total
-Time: 0.45s`;
-    } else {
-      type = 'error';
-      output = `FAIL tests/two_sum.test.py
-✕ two_sum returns correct indices for example case (4ms)
-  Expected: [0, 1]
-  Received: None
+      setTerminalLines(prev => {
+        const lines = [...prev];
+        if (output) lines.push({ text: output, type: 'output' });
+        if (error) lines.push({ text: error, type: 'error' });
+        return lines;
+      });
 
-Test Suites: 1 failed, 1 total
-Tests: 0 passed, 3 failed
-Time: 0.45s`;
+      return output || error || "";
+    } catch (e: any) {
+      const err = `System Error: ${e.message}`;
+      setTerminalLines(prev => [...prev, { text: err, type: 'error' }]);
+      return err;
+    } finally {
+      setIsPyodideLoading(false);
     }
-
-    setTerminalLines(prev => [
-      ...prev,
-      { text: output, type }
-    ]);
-
-    return output;
   }, [files]);
 
   return (
@@ -91,13 +101,15 @@ Time: 0.45s`;
         <div className="flex items-center gap-3">
           <button
             onClick={handleRun}
-            className="flex items-center justify-center gap-2 rounded-lg h-9 px-4 bg-primary text-white text-sm font-bold transition-all hover:bg-primary/80 shadow-lg shadow-primary/20">
-            <span className="material-symbols-outlined text-sm">play_arrow</span>
-            <span>Run</span>
+            disabled={isPyodideLoading}
+            className={`flex items-center justify-center gap-2 rounded-lg h-9 px-4 text-white text-sm font-bold transition-all shadow-lg ${isPyodideLoading ? 'bg-primary/50 cursor-not-allowed' : 'bg-primary hover:bg-primary/80 shadow-primary/20'}`}>
+            {isPyodideLoading ? <span className="material-symbols-outlined text-sm animate-spin">sync</span> : <span className="material-symbols-outlined text-sm">play_arrow</span>}
+            <span>{isPyodideLoading ? 'Loading...' : 'Run'}</span>
           </button>
           <button
             onClick={handleRunTests}
-            className="flex items-center justify-center gap-2 rounded-lg h-9 px-4 bg-[#e5c07b] text-black text-sm font-bold transition-all hover:bg-[#d1b06f] shadow-lg shadow-[#e5c07b]/20">
+            disabled={isPyodideLoading}
+            className={`flex items-center justify-center gap-2 rounded-lg h-9 px-4 text-black text-sm font-bold transition-all shadow-lg ${isPyodideLoading ? 'bg-[#e5c07b]/50 cursor-not-allowed' : 'bg-[#e5c07b] hover:bg-[#d1b06f] shadow-[#e5c07b]/20'}`}>
             <span className="material-symbols-outlined text-sm">science</span>
             <span>Test</span>
           </button>
