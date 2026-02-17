@@ -28,6 +28,7 @@ export const runPythonArgs = async (code: string, context: any = {}) => {
     pyodide.setStderr({ batched: (msg: string) => stdout.push(msg) });
 
     // Load context variables
+    //Ibrahim was here
     for (const [key, value] of Object.entries(context)) {
         pyodide.globals.set(key, value);
     }
