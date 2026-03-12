@@ -7,6 +7,8 @@ import { MentorStatus, TranscriptionItem } from '../types';
 interface MentorPanelProps {
   codeContent: string;
   onRunTests?: () => Promise<string>;
+  onUpdateFile?: (fileName: string, content: string) => void;
+  onSetNewProblem?: (problemFileName: string, problemContent: string, testFileName: string, testContent: string) => void;
 }
 
 const runTestsFunctionDeclaration: FunctionDeclaration = {
@@ -23,7 +25,53 @@ const runTestsFunctionDeclaration: FunctionDeclaration = {
   },
 };
 
-const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) => {
+const updateFileContentFunctionDeclaration: FunctionDeclaration = {
+  name: 'updateFileContent',
+  parameters: {
+    type: Type.OBJECT,
+    description: 'Writes code directly to a file in the user\'s editor.',
+    properties: {
+      fileName: {
+        type: Type.STRING,
+        description: 'The name of the file to update (e.g., "two_sum.py").',
+      },
+      content: {
+        type: Type.STRING,
+        description: 'The new source code content for the file.',
+      }
+    },
+    required: ['fileName', 'content']
+  },
+};
+
+const setNewProblemFunctionDeclaration: FunctionDeclaration = {
+  name: 'setNewProblem',
+  parameters: {
+    type: Type.OBJECT,
+    description: 'Replaces the current workspace with a brand new coding challenge.',
+    properties: {
+      problemFileName: {
+        type: Type.STRING,
+        description: 'The filename for the solution file (e.g., "fibonacci.py").',
+      },
+      problemContent: {
+        type: Type.STRING,
+        description: 'The boilerplate code for the new problem.',
+      },
+      testFileName: {
+        type: Type.STRING,
+        description: 'The filename for the test file (e.g., "tests_fib.py").',
+      },
+      testContent: {
+        type: Type.STRING,
+        description: 'The unit tests for the new problem.',
+      }
+    },
+    required: ['problemFileName', 'problemContent', 'testFileName', 'testContent']
+  },
+};
+
+const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests, onUpdateFile, onSetNewProblem }) => {
   const [status, setStatus] = useState<MentorStatus>(MentorStatus.IDLE);
   const [transcriptions, setTranscriptions] = useState<TranscriptionItem[]>([]);
   const [isListening, setIsListening] = useState(false);
@@ -140,10 +188,14 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
         return;
       }
 
-      screenStream.getVideoTracks()[0].onended = () => stopSession();
+      screenStream.getVideoTracks()[0].onended = () => {
+        console.log('Screen stream track ended');
+        stopSession();
+      };
 
       setIsListening(true);
       setStatus(MentorStatus.LISTENING);
+      console.log('Attempting to connect to Gemini Live...');
 
       const ai = new GoogleGenAI({ apiKey });
 
@@ -166,6 +218,7 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
         model: 'gemini-2.5-flash-native-audio-preview-12-2025',
         callbacks: {
           onopen: () => {
+            console.log('Gemini Live connection opened');
             const source = audioCtxRef.current!.createMediaStreamSource(micStream);
             const scriptProcessor = audioCtxRef.current!.createScriptProcessor(4096, 1, 1);
             scriptProcessorRef.current = scriptProcessor;
@@ -222,6 +275,18 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
                   sessionPromise.then(s => s.sendToolResponse({
                     functionResponses: { id: fc.id, name: fc.name, response: { result } }
                   }));
+                } else if (fc.name === 'updateFileContent') {
+                  const { fileName, content } = fc.args as any;
+                  if (onUpdateFile) onUpdateFile(fileName, content);
+                  sessionPromise.then(s => s.sendToolResponse({
+                    functionResponses: { id: fc.id, name: fc.name, response: { result: `Updated ${fileName} with new content.` } }
+                  }));
+                } else if (fc.name === 'setNewProblem') {
+                  const { problemFileName, problemContent, testFileName, testContent } = fc.args as any;
+                  if (onSetNewProblem) onSetNewProblem(problemFileName, problemContent, testFileName, testContent);
+                  sessionPromise.then(s => s.sendToolResponse({
+                    functionResponses: { id: fc.id, name: fc.name, response: { result: `New problem ${problemFileName} has been set.` } }
+                  }));
                 }
               }
             }
@@ -241,27 +306,43 @@ const MentorPanel: React.FC<MentorPanelProps> = ({ codeContent, onRunTests }) =>
           },
           onerror: (e: any) => {
             console.error('Mentor Session Error:', e);
-            setErrorMessage("Connection error. Restart session.");
+            const errorMsg = e.message || "Connection error. Ensure your API Key is valid and supports the Multimodal Live API.";
+            setErrorMessage(errorMsg);
             stopSession();
           },
-          onclose: () => stopSession()
+          onclose: (e: any) => {
+            console.log('Gemini Live connection closed:', e);
+            if (e && e.code && e.code !== 1000) {
+              setErrorMessage(`Connection closed (${e.code}): ${e.reason || 'Invalid API key or unsupported Multimodal Live config.'}`);
+            }
+            stopSession();
+          }
         },
         config: {
           responseModalities: [Modality.AUDIO],
-          systemInstruction: `You are 'Dev-Mentor,' a senior full-stack engineer and Socratic teacher. Your goal is to guide junior developers (interns) through coding tasks using real-time multimodal input.
+          systemInstruction: `You are 'Dev-Mentor,' a senior full-stack engineer and Socratic teacher. Your goal is to guide junior developers through coding tasks using real-time multimodal input.
 
 Core Directives:
 
-Never Give the Answer: If you see a bug or a missing feature, do not provide the code block. Instead, ask a question that leads the user to notice it (e.g., 'I see you're using a map function here; what happens if the array is empty?').
+1. Socratic Teaching First: Always start by asking guided questions. Never give the answer immediately. Lead the user to discover bugs or implementation details themselves.
 
-Visual Grounding: Use the video feed to reference specific lines or UI elements. Say 'I see you're looking at the useEffect on line 45' rather than 'Look at the effect.'
+2. 'Give Up' Protocol: If the user is clearly stuck, frustrated, or explicitly says 'I give up' or 'just show me', transition to a 'Guide and Write' mode. 
+   - Explain the simplest possible solution step-by-step.
+   - Use the 'updateFileContent' tool to write the solution (or a partial hint) into their editor while you explain it.
+   - Teach them *how to think* through the problem as you write.
 
-The 'Verification' Loop: When the user makes a change, suggest they run the local test suite. Use function calling to trigger npm test.
+3. Interactive Editor: You can directly modify the user's code using 'updateFileContent'. Use this for providing hints, boilerplate, or the final solution when the user gives up.
 
-Multimodal Awareness: Respond to the user's voice tone. If they sound frustrated, simplify your questions and offer encouragement.
+4. Visual Grounding: Use the video feed to reference specific lines or UI elements. Say 'I see you're looking at the useEffect on line 45'.
 
-Chain of Thought: Always use your 'Thinking' space to plan your Socratic path before speaking.`,
-          tools: [{ functionDeclarations: [runTestsFunctionDeclaration] }],
+5. The 'Verification' Loop: When the user makes a change, suggest they run the local test suite using 'runTests'.
+
+6. Success & New Challenges: After the user (or you, if they gave up) successfully passes all tests, congratulate them. Then, use 'setNewProblem' to provide a new challenge that builds on what they just learned. Generate a relevant Python problem and its corresponding unit tests.
+
+7. Multimodal Awareness: Respond to the user's voice tone. If they sound frustrated, simplify your questions and offer encouragement.
+
+Chain of Thought: Always use your 'Thinking' space to plan your Socratic path or the solution you are about to write.`,
+          tools: [{ functionDeclarations: [runTestsFunctionDeclaration, updateFileContentFunctionDeclaration, setNewProblemFunctionDeclaration] }],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } } },
           inputAudioTranscription: {},
           outputAudioTranscription: {}

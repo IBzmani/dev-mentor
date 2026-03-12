@@ -20,6 +20,23 @@ const App: React.FC = () => {
     setFiles(prev => prev.map(f => f.name === activeFileName ? { ...f, content: newContent } : f));
   };
 
+  const handleUpdateFile = useCallback((fileName: string, content: string) => {
+    setFiles(prev => prev.map(f => f.name === fileName ? { ...f, content } : f));
+    setActiveFileName(fileName);
+  }, []);
+
+  const handleSetNewProblem = useCallback((
+    problemFileName: string, problemContent: string,
+    testFileName: string, testContent: string
+  ) => {
+    setFiles([
+      { name: problemFileName, type: 'python', content: problemContent },
+      { name: testFileName, type: 'python', content: testContent }
+    ]);
+    setActiveFileName(problemFileName);
+    setTerminalLines(prev => [...prev, { text: `New problem loaded: ${problemFileName}`, type: 'output' }]);
+  }, []);
+
   const [isPyodideLoading, setIsPyodideLoading] = useState(false);
 
   const handleRun = async () => {
@@ -215,7 +232,12 @@ const App: React.FC = () => {
         </section>
 
         {/* Right AI Sidebar */}
-        <MentorPanel codeContent={activeFile.content} onRunTests={handleRunTests} />
+        <MentorPanel
+          codeContent={activeFile.content}
+          onRunTests={handleRunTests}
+          onUpdateFile={handleUpdateFile}
+          onSetNewProblem={handleSetNewProblem}
+        />
       </main>
 
       {/* Footer Status Bar */}
